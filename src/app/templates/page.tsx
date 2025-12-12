@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback, memo } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card";
@@ -85,6 +85,18 @@ interface Category {
   is_active: boolean;
 }
 
+// Debounce hook for search optimization
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+
+  return debouncedValue;
+}
+
 function getFormatIcon(format: string) {
   switch (format?.toLowerCase()) {
     case "pptx":
@@ -167,6 +179,9 @@ export default function TemplatesPage() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
+  // Debounced search for performance
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+
   // Fetch templates
   useEffect(() => {
     async function fetchData() {
@@ -197,12 +212,12 @@ export default function TemplatesPage() {
     fetchData();
   }, []);
 
-  // Filter and sort templates
+  // Filter and sort templates with debounced search
   const filteredTemplates = useMemo(() => {
     let result = [...templates];
 
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
+    if (debouncedSearchQuery) {
+      const query = debouncedSearchQuery.toLowerCase();
       result = result.filter(
         (t) =>
           t.name.toLowerCase().includes(query) ||
@@ -242,7 +257,7 @@ export default function TemplatesPage() {
     }
 
     return result;
-  }, [templates, searchQuery, selectedCategory, selectedFormat, showPremiumOnly, sortBy]);
+  }, [templates, debouncedSearchQuery, selectedCategory, selectedFormat, showPremiumOnly, sortBy]);
 
   // Get unique formats
   const availableFormats = useMemo(() => {
@@ -259,17 +274,17 @@ export default function TemplatesPage() {
     return count;
   }, [selectedCategory, selectedFormat, showPremiumOnly]);
 
-  // Clear all filters
-  const clearFilters = () => {
+  // Clear all filters - memoized
+  const clearFilters = useCallback(() => {
     setSearchQuery("");
     setSelectedCategory("all");
     setSelectedFormat("all");
     setShowPremiumOnly("all");
     setSortBy("newest");
-  };
+  }, []);
 
-  // Handle download
-  const handleDownload = async (template: Template) => {
+  // Handle download - memoized
+  const handleDownload = useCallback(async (template: Template) => {
     if (template.is_premium) {
       toast.info("Premium templates require a Pro subscription", {
         action: {
@@ -295,13 +310,26 @@ export default function TemplatesPage() {
     } finally {
       setDownloading(null);
     }
-  };
+  }, []);
 
-  // Stats
-  const totalTemplates = templates.length;
-  const freeTemplates = templates.filter((t) => !t.is_premium).length;
-  const totalDownloads = templates.reduce((sum, t) => sum + t.download_count, 0);
-  const premiumTemplates = templates.filter((t) => t.is_premium).length;
+  // Stats - memoized to prevent recalculation
+  const stats = useMemo(() => ({
+    total: templates.length,
+    free: templates.filter((t) => !t.is_premium).length,
+    premium: templates.filter((t) => t.is_premium).length,
+    downloads: templates.reduce((sum, t) => sum + t.download_count, 0),
+  }), [templates]);
+
+  // Memoized category counts to avoid recalculating on each render
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    templates.forEach((t) => {
+      if (t.category_id) {
+        counts[t.category_id] = (counts[t.category_id] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [templates]);
 
   // Filter Panel Component
   const FilterPanel = ({ isMobile = false }: { isMobile?: boolean }) => (
@@ -461,7 +489,7 @@ export default function TemplatesPage() {
       </button>
       
       {categories.map((category) => {
-        const count = templates.filter((t) => t.category_id === category.id).length;
+        const count = categoryCounts[category.id] || 0;
         const isSelected = selectedCategory === category.id;
         return (
           <button
@@ -514,7 +542,7 @@ export default function TemplatesPage() {
             <div className="max-w-4xl mx-auto text-center">
               <Badge variant="secondary" className="mb-4 px-4 py-1.5">
                 <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-                {totalTemplates}+ Professional Templates
+                {stats.total}+ Professional Templates
               </Badge>
               
               <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-4 md:mb-6 bg-gradient-to-r from-foreground via-foreground to-foreground/70 bg-clip-text">
@@ -532,28 +560,28 @@ export default function TemplatesPage() {
                   <div className="p-2 sm:p-2.5 bg-primary/10 rounded-xl w-fit mx-auto mb-2 sm:mb-3">
                     <Download className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
                   </div>
-                  <span className="font-bold text-lg sm:text-xl md:text-2xl block">{formatDownloads(totalDownloads)}</span>
+                  <span className="font-bold text-lg sm:text-xl md:text-2xl block">{formatDownloads(stats.downloads)}</span>
                   <p className="text-[10px] sm:text-xs md:text-sm text-muted-foreground">Downloads</p>
                 </div>
                 <div className="bg-card/60 backdrop-blur-sm border rounded-xl sm:rounded-2xl p-3 sm:p-4 md:p-5 transition-all duration-300 hover:shadow-lg hover:scale-105 hover:bg-card/80">
                   <div className="p-2 sm:p-2.5 bg-blue-500/10 rounded-xl w-fit mx-auto mb-2 sm:mb-3">
                     <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-blue-500" />
                   </div>
-                  <span className="font-bold text-lg sm:text-xl md:text-2xl block">{totalTemplates}</span>
+                  <span className="font-bold text-lg sm:text-xl md:text-2xl block">{stats.total}</span>
                   <p className="text-[10px] sm:text-xs md:text-sm text-muted-foreground">Templates</p>
                 </div>
                 <div className="bg-card/60 backdrop-blur-sm border rounded-xl sm:rounded-2xl p-3 sm:p-4 md:p-5 transition-all duration-300 hover:shadow-lg hover:scale-105 hover:bg-card/80">
                   <div className="p-2 sm:p-2.5 bg-green-500/10 rounded-xl w-fit mx-auto mb-2 sm:mb-3">
                     <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5 text-green-500" />
                   </div>
-                  <span className="font-bold text-lg sm:text-xl md:text-2xl block">{freeTemplates}</span>
+                  <span className="font-bold text-lg sm:text-xl md:text-2xl block">{stats.free}</span>
                   <p className="text-[10px] sm:text-xs md:text-sm text-muted-foreground">Free</p>
                 </div>
                 <div className="bg-card/60 backdrop-blur-sm border rounded-xl sm:rounded-2xl p-3 sm:p-4 md:p-5 transition-all duration-300 hover:shadow-lg hover:scale-105 hover:bg-card/80">
                   <div className="p-2 sm:p-2.5 bg-yellow-500/10 rounded-xl w-fit mx-auto mb-2 sm:mb-3">
                     <Crown className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-500" />
                   </div>
-                  <span className="font-bold text-lg sm:text-xl md:text-2xl block">{premiumTemplates}</span>
+                  <span className="font-bold text-lg sm:text-xl md:text-2xl block">{stats.premium}</span>
                   <p className="text-[10px] sm:text-xs md:text-sm text-muted-foreground">Premium</p>
                 </div>
               </div>
@@ -805,7 +833,7 @@ export default function TemplatesPage() {
                 {/* Grid View */}
                 {!loading && viewMode === "grid" && filteredTemplates.length > 0 && (
                   <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4 sm:gap-5 lg:gap-6">
-                    {filteredTemplates.map((template) => (
+                    {filteredTemplates.map((template, index) => (
                       <Card 
                         key={template.id} 
                         className="group overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-1 border-border/50 hover:border-primary/20"
@@ -817,6 +845,8 @@ export default function TemplatesPage() {
                               src={template.preview_url}
                               alt={template.name}
                               fill
+                              sizes="(max-width: 475px) 100vw, (max-width: 1024px) 50vw, (max-width: 1536px) 33vw, 25vw"
+                              loading={index < 8 ? "eager" : "lazy"}
                               className="object-cover transition-transform duration-500 group-hover:scale-105"
                             />
                           ) : (
@@ -1011,7 +1041,7 @@ export default function TemplatesPage() {
                 Get Access to All Premium Templates
               </h2>
               <p className="text-muted-foreground text-base md:text-lg max-w-xl mx-auto mb-8">
-                Upgrade to Pro for unlimited access to all {premiumTemplates}+ premium templates, 
+                Upgrade to Pro for unlimited access to all {stats.premium}+ premium templates, 
                 priority support, and exclusive new releases.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
