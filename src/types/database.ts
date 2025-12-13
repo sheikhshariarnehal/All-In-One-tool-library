@@ -92,42 +92,69 @@ export interface Database {
           slug: string
           name: string
           description: string | null
+          short_description: string | null
           category: string
           icon: string | null
+          icon_url: string | null
+          site_url: string | null
+          is_external: boolean
           is_premium: boolean
           is_active: boolean
           usage_limit_free: number
           usage_limit_pro: number
+          features: string[]
+          tags: string[]
+          sort_order: number
+          views_count: number
           metadata: Json | null
           created_at: string
+          updated_at: string
         }
         Insert: {
           id?: string
           slug: string
           name: string
           description?: string | null
+          short_description?: string | null
           category: string
           icon?: string | null
+          icon_url?: string | null
+          site_url?: string | null
+          is_external?: boolean
           is_premium?: boolean
           is_active?: boolean
           usage_limit_free?: number
           usage_limit_pro?: number
+          features?: string[]
+          tags?: string[]
+          sort_order?: number
+          views_count?: number
           metadata?: Json | null
           created_at?: string
+          updated_at?: string
         }
         Update: {
           id?: string
           slug?: string
           name?: string
           description?: string | null
+          short_description?: string | null
           category?: string
           icon?: string | null
+          icon_url?: string | null
+          site_url?: string | null
+          is_external?: boolean
           is_premium?: boolean
           is_active?: boolean
           usage_limit_free?: number
           usage_limit_pro?: number
+          features?: string[]
+          tags?: string[]
+          sort_order?: number
+          views_count?: number
           metadata?: Json | null
           created_at?: string
+          updated_at?: string
         }
       }
       tool_usage: {

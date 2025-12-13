@@ -143,6 +143,14 @@ export const toolsMetadata: ToolMetadata[] = [
     keywords: ["essay", "outline", "structure", "planning", "writing"],
   },
   {
+    slug: "image-to-pdf",
+    name: "Image to PDF",
+    description: "Upload multiple images and create a PDF. Drag & drop to reorder, adjust size, and rotate images.",
+    category: "academic",
+    isPremium: false,
+    keywords: ["image", "pdf", "convert", "jpg", "png", "photo", "combine", "merge"],
+  },
+  {
     slug: "readability-analyzer",
     name: "Readability Analyzer",
     description: "Analyze text readability with Flesch-Kincaid, Gunning Fog, and other metrics.",

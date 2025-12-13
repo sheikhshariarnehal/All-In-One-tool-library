@@ -1,0 +1,53 @@
+-- Add Image to PDF tool to academic category
+-- This migration adds the Image to PDF converter tool
+
+INSERT INTO public.tools (
+  slug, 
+  name, 
+  description, 
+  short_description, 
+  category, 
+  icon, 
+  icon_url, 
+  site_url, 
+  is_external, 
+  is_premium, 
+  is_active, 
+  usage_limit_free, 
+  usage_limit_pro, 
+  features, 
+  tags, 
+  sort_order, 
+  views_count, 
+  metadata
+) VALUES (
+  'image-to-pdf',
+  'Image to PDF',
+  'Upload multiple images and create a PDF. Drag & drop to reorder, adjust size, and rotate images. Perfect for creating documents from photos or scanned images.',
+  'Convert multiple images to PDF',
+  'academic',
+  'FileImage',
+  NULL,
+  NULL,
+  false,
+  false,
+  true,
+  50,
+  1000,
+  '["Upload multiple images","Drag & drop reordering","Rotate images","Zoom in/out","Multiple page sizes","Portrait/Landscape orientation","Custom filename"]'::jsonb,
+  '{image,pdf,convert,jpg,png,photo,combine,merge,academic,document}',
+  10,
+  0,
+  '{}'::jsonb
+) ON CONFLICT (slug) DO UPDATE SET
+  name = EXCLUDED.name,
+  description = EXCLUDED.description,
+  short_description = EXCLUDED.short_description,
+  category = EXCLUDED.category,
+  icon = EXCLUDED.icon,
+  is_external = EXCLUDED.is_external,
+  is_premium = EXCLUDED.is_premium,
+  is_active = EXCLUDED.is_active,
+  features = EXCLUDED.features,
+  tags = EXCLUDED.tags,
+  updated_at = NOW();

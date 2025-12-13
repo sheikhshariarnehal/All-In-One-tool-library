@@ -50,9 +50,7 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Admin routes - authentication disabled for development
-  // To re-enable, uncomment the admin auth check below
-  /*
+  // Admin routes - check authentication and role
   const isAdminPath = request.nextUrl.pathname.startsWith("/admin");
   
   if (isAdminPath) {
@@ -63,9 +61,17 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    const userRole = user.user_metadata?.role;
-    const isAdmin = userRole === "admin" || userRole === "super_admin";
-    const adminEmails = process.env.ADMIN_EMAILS?.split(",") || [];
+    // Check role from profiles table
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    const isAdmin = profile?.role === "admin" || profile?.role === "super_admin";
+    
+    // Fallback: check admin emails from env
+    const adminEmails = process.env.ADMIN_EMAILS?.split(",").map(e => e.trim()) || [];
     const isAdminEmail = adminEmails.includes(user.email || "");
 
     if (!isAdmin && !isAdminEmail) {
@@ -74,7 +80,6 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
   }
-  */
 
   // Redirect authenticated users away from auth pages
   const authPaths = ["/auth/login", "/auth/register"];

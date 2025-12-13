@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import {
   Table,
@@ -30,7 +31,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -39,8 +39,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Search,
   MoreHorizontal,
@@ -57,6 +68,10 @@ import {
   Image,
   GraduationCap,
   Crown,
+  ExternalLink,
+  Globe,
+  RefreshCw,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -66,23 +81,49 @@ const categoryIcons: Record<string, React.ElementType> = {
   "ai-image": Image,
   document: FileText,
   utilities: Wrench,
+  ai: Wrench,
+  seo: Globe,
+  social: Globe,
+  marketing: Globe,
+  finance: Globe,
+  productivity: Globe,
+  design: Image,
+  other: Wrench,
 };
 
-// Mock tools data
-const mockTools = [
-  { id: "1", name: "JSON Formatter", slug: "json-formatter", category: "developer", isPremium: false, isActive: true, usageCount: 15234, description: "Format, validate, and beautify JSON data" },
-  { id: "2", name: "Base64 Encoder", slug: "base64-encoder", category: "developer", isPremium: false, isActive: true, usageCount: 12456, description: "Encode and decode Base64 strings" },
-  { id: "3", name: "Image Compressor", slug: "image-compressor", category: "ai-image", isPremium: true, isActive: true, usageCount: 9876, description: "Compress images without quality loss" },
-  { id: "4", name: "Word Counter", slug: "word-counter", category: "academic", isPremium: false, isActive: true, usageCount: 8765, description: "Count words, characters, and sentences" },
-  { id: "5", name: "Citation Generator", slug: "citation-generator", category: "academic", isPremium: false, isActive: true, usageCount: 7654, description: "Generate citations in APA, MLA, Chicago" },
-  { id: "6", name: "QR Code Generator", slug: "qr-code-generator", category: "utilities", isPremium: false, isActive: true, usageCount: 6543, description: "Create QR codes for URLs and text" },
-  { id: "7", name: "Hash Generator", slug: "hash-generator", category: "developer", isPremium: false, isActive: true, usageCount: 5432, description: "Generate MD5, SHA-1, SHA-256 hashes" },
-  { id: "8", name: "Regex Tester", slug: "regex-tester", category: "developer", isPremium: true, isActive: false, usageCount: 4321, description: "Test and debug regular expressions" },
-  { id: "9", name: "Lorem Ipsum", slug: "lorem-ipsum", category: "developer", isPremium: false, isActive: true, usageCount: 3210, description: "Generate placeholder text" },
-  { id: "10", name: "URL Encoder", slug: "url-encoder", category: "developer", isPremium: false, isActive: true, usageCount: 2109, description: "Encode and decode URLs" },
-];
+// Tool interface matching database schema
+interface Tool {
+  id: string;
+  name: string;
+  slug: string;
+  category: string;
+  description: string | null;
+  short_description: string | null;
+  icon: string | null;
+  icon_url: string | null;
+  site_url: string | null;
+  is_external: boolean;
+  is_premium: boolean;
+  is_active: boolean;
+  usage_limit_free: number;
+  usage_limit_pro: number;
+  features: string[];
+  tags: string[];
+  sort_order: number;
+  metadata: Record<string, unknown> | null;
+  views_count: number;
+  usage_count: number;
+  created_at: string;
+  updated_at: string;
+}
 
-type Tool = typeof mockTools[0];
+interface Stats {
+  totalTools: number;
+  activeTools: number;
+  premiumTools: number;
+  externalTools: number;
+  totalUsage: number;
+}
 
 const categories = [
   { value: "developer", label: "Developer" },
@@ -90,111 +131,147 @@ const categories = [
   { value: "ai-image", label: "AI Image" },
   { value: "utilities", label: "Utilities" },
   { value: "document", label: "Document" },
-  { value: "professional", label: "Professional" },
+  { value: "ai", label: "AI Tools" },
+  { value: "seo", label: "SEO" },
+  { value: "social", label: "Social" },
+  { value: "marketing", label: "Marketing" },
+  { value: "finance", label: "Finance" },
+  { value: "productivity", label: "Productivity" },
+  { value: "design", label: "Design" },
+  { value: "other", label: "Other" },
 ];
 
 export default function ToolsManagementPage() {
-  const [tools, setTools] = useState<Tool[]>(mockTools);
+  const router = useRouter();
+  const [tools, setTools] = useState<Tool[]>([]);
+  const [stats, setStats] = useState<Stats>({
+    totalTools: 0,
+    activeTools: 0,
+    premiumTools: 0,
+    externalTools: 0,
+    totalUsage: 0,
+  });
   const [searchQuery, setSearchQuery] = useState("");
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [selectedTool, setSelectedTool] = useState<Tool | null>(null);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isUpdating, setIsUpdating] = useState<string | null>(null);
 
-  // Form state for add/edit
-  const [formData, setFormData] = useState({
-    name: "",
-    slug: "",
-    category: "developer",
-    description: "",
-    isPremium: false,
-    isActive: true,
-  });
+  // Fetch tools on mount
+  useEffect(() => {
+    fetchTools();
+  }, []);
+
+  const fetchTools = async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch("/api/admin/tools", { credentials: 'include' });
+      const data = await response.json();
+      
+      if (data.tools) {
+        setTools(data.tools);
+      }
+      if (data.stats) {
+        setStats(data.stats);
+      }
+    } catch (error) {
+      console.error("Error fetching tools:", error);
+      toast.error("Failed to fetch tools");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const filteredTools = tools.filter((tool) => {
     const matchesSearch = tool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      tool.slug.toLowerCase().includes(searchQuery.toLowerCase());
+      tool.slug.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (tool.description || "").toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = filterCategory === "all" || tool.category === filterCategory;
     const matchesStatus = filterStatus === "all" || 
-      (filterStatus === "active" && tool.isActive) ||
-      (filterStatus === "inactive" && !tool.isActive) ||
-      (filterStatus === "premium" && tool.isPremium);
+      (filterStatus === "active" && tool.is_active) ||
+      (filterStatus === "inactive" && !tool.is_active) ||
+      (filterStatus === "premium" && tool.is_premium) ||
+      (filterStatus === "external" && tool.is_external);
     return matchesSearch && matchesCategory && matchesStatus;
   });
 
-  const stats = {
-    total: tools.length,
-    active: tools.filter(t => t.isActive).length,
-    premium: tools.filter(t => t.isPremium).length,
-    totalUsage: tools.reduce((sum, t) => sum + t.usageCount, 0),
+  const handleToggleActive = async (tool: Tool) => {
+    setIsUpdating(tool.id);
+    try {
+      const response = await fetch("/api/admin/tools", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: 'include',
+        body: JSON.stringify({ id: tool.id, is_active: !tool.is_active }),
+      });
+
+      if (!response.ok) throw new Error("Failed to update tool");
+
+      setTools(tools.map(t => 
+        t.id === tool.id ? { ...t, is_active: !t.is_active } : t
+      ));
+      toast.success(tool.is_active ? "Tool disabled" : "Tool enabled");
+    } catch (error) {
+      console.error("Error updating tool:", error);
+      toast.error("Failed to update tool");
+    } finally {
+      setIsUpdating(null);
+    }
   };
 
-  const handleToggleActive = (tool: Tool) => {
-    setTools(tools.map(t => 
-      t.id === tool.id ? { ...t, isActive: !t.isActive } : t
-    ));
-    toast.success(tool.isActive ? "Tool disabled" : "Tool enabled");
+  const handleTogglePremium = async (tool: Tool) => {
+    setIsUpdating(tool.id);
+    try {
+      const response = await fetch("/api/admin/tools", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: 'include',
+        body: JSON.stringify({ id: tool.id, is_premium: !tool.is_premium }),
+      });
+
+      if (!response.ok) throw new Error("Failed to update tool");
+
+      setTools(tools.map(t => 
+        t.id === tool.id ? { ...t, is_premium: !t.is_premium } : t
+      ));
+      toast.success(tool.is_premium ? "Tool set to free" : "Tool set to premium");
+    } catch (error) {
+      console.error("Error updating tool:", error);
+      toast.error("Failed to update tool");
+    } finally {
+      setIsUpdating(null);
+    }
   };
 
-  const handleTogglePremium = (tool: Tool) => {
-    setTools(tools.map(t => 
-      t.id === tool.id ? { ...t, isPremium: !t.isPremium } : t
-    ));
-    toast.success(tool.isPremium ? "Tool set to free" : "Tool set to premium");
-  };
-
-  const handleDeleteTool = (tool: Tool) => {
-    setTools(tools.filter(t => t.id !== tool.id));
-    toast.success("Tool deleted successfully");
-  };
-
-  const handleAddTool = () => {
-    const newTool: Tool = {
-      id: String(Date.now()),
-      name: formData.name,
-      slug: formData.slug || formData.name.toLowerCase().replace(/\s+/g, "-"),
-      category: formData.category,
-      description: formData.description,
-      isPremium: formData.isPremium,
-      isActive: formData.isActive,
-      usageCount: 0,
-    };
-    setTools([...tools, newTool]);
-    setIsAddDialogOpen(false);
-    setFormData({ name: "", slug: "", category: "developer", description: "", isPremium: false, isActive: true });
-    toast.success("Tool added successfully");
-  };
-
-  const handleEditTool = () => {
+  const handleDeleteTool = async () => {
     if (!selectedTool) return;
-    setTools(tools.map(t => 
-      t.id === selectedTool.id ? {
-        ...t,
-        name: formData.name,
-        slug: formData.slug,
-        category: formData.category,
-        description: formData.description,
-        isPremium: formData.isPremium,
-        isActive: formData.isActive,
-      } : t
-    ));
-    setIsEditDialogOpen(false);
-    toast.success("Tool updated successfully");
+    
+    setIsUpdating(selectedTool.id);
+    try {
+      const response = await fetch(`/api/admin/tools?id=${selectedTool.id}`, {
+        method: "DELETE",
+        credentials: 'include',
+      });
+
+      if (!response.ok) throw new Error("Failed to delete tool");
+
+      setTools(tools.filter(t => t.id !== selectedTool.id));
+      toast.success("Tool deleted successfully");
+      setIsDeleteDialogOpen(false);
+      setSelectedTool(null);
+    } catch (error) {
+      console.error("Error deleting tool:", error);
+      toast.error("Failed to delete tool");
+    } finally {
+      setIsUpdating(null);
+    }
   };
 
-  const openEditDialog = (tool: Tool) => {
-    setSelectedTool(tool);
-    setFormData({
-      name: tool.name,
-      slug: tool.slug,
-      category: tool.category,
-      description: tool.description,
-      isPremium: tool.isPremium,
-      isActive: tool.isActive,
-    });
-    setIsEditDialogOpen(true);
+  const openEditPage = (tool: Tool) => {
+    router.push(`/admin/tools/add?id=${tool.id}`);
   };
 
   return (
@@ -202,99 +279,33 @@ export default function ToolsManagementPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Tools Management</h1>
-          <p className="text-muted-foreground">Manage your platform tools and their settings</p>
+          <p className="text-muted-foreground">Manage your platform tools and external redirects</p>
         </div>
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={fetchTools} disabled={isLoading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+          <Button asChild>
+            <Link href="/admin/tools/add">
               <Plus className="h-4 w-4 mr-2" />
               Add Tool
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Add New Tool</DialogTitle>
-              <DialogDescription>Create a new tool for your platform</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Tool Name</Label>
-                <Input 
-                  id="name" 
-                  placeholder="JSON Formatter"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="slug">Slug (URL path)</Label>
-                <Input 
-                  id="slug" 
-                  placeholder="json-formatter"
-                  value={formData.slug}
-                  onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="category">Category</Label>
-                <Select value={formData.category} onValueChange={(v) => setFormData({ ...formData, category: v })}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map((cat) => (
-                      <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Textarea 
-                  id="description" 
-                  placeholder="Describe what this tool does..."
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Premium Tool</Label>
-                  <p className="text-sm text-muted-foreground">Require subscription to access</p>
-                </div>
-                <Switch 
-                  checked={formData.isPremium}
-                  onCheckedChange={(checked) => setFormData({ ...formData, isPremium: checked })}
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Active</Label>
-                  <p className="text-sm text-muted-foreground">Make tool available to users</p>
-                </div>
-                <Switch 
-                  checked={formData.isActive}
-                  onCheckedChange={(checked) => setFormData({ ...formData, isActive: checked })}
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>Cancel</Button>
-              <Button onClick={handleAddTool}>Add Tool</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Total Tools</CardTitle>
             <Wrench className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.total}</div>
+            <div className="text-2xl font-bold">
+              {isLoading ? <Skeleton className="h-8 w-12" /> : stats.totalTools}
+            </div>
           </CardContent>
         </Card>
         <Card>
@@ -303,7 +314,9 @@ export default function ToolsManagementPage() {
             <Eye className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.active}</div>
+            <div className="text-2xl font-bold">
+              {isLoading ? <Skeleton className="h-8 w-12" /> : stats.activeTools}
+            </div>
           </CardContent>
         </Card>
         <Card>
@@ -312,16 +325,31 @@ export default function ToolsManagementPage() {
             <Crown className="h-4 w-4 text-yellow-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.premium}</div>
+            <div className="text-2xl font-bold">
+              {isLoading ? <Skeleton className="h-8 w-12" /> : stats.premiumTools}
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">External Tools</CardTitle>
+            <ExternalLink className="h-4 w-4 text-blue-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {isLoading ? <Skeleton className="h-8 w-12" /> : stats.externalTools}
+            </div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Total Usage</CardTitle>
-            <BarChart3 className="h-4 w-4 text-blue-500" />
+            <BarChart3 className="h-4 w-4 text-purple-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.totalUsage.toLocaleString()}</div>
+            <div className="text-2xl font-bold">
+              {isLoading ? <Skeleton className="h-8 w-12" /> : stats.totalUsage.toLocaleString()}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -360,19 +388,52 @@ export default function ToolsManagementPage() {
                   <SelectItem value="active">Active</SelectItem>
                   <SelectItem value="inactive">Inactive</SelectItem>
                   <SelectItem value="premium">Premium</SelectItem>
+                  <SelectItem value="external">External</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
         </CardHeader>
         <CardContent>
+          {isLoading ? (
+            <div className="space-y-4">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="flex items-center gap-4">
+                  <Skeleton className="h-12 w-12 rounded-lg" />
+                  <div className="space-y-2 flex-1">
+                    <Skeleton className="h-4 w-48" />
+                    <Skeleton className="h-3 w-32" />
+                  </div>
+                  <Skeleton className="h-6 w-20" />
+                  <Skeleton className="h-6 w-16" />
+                </div>
+              ))}
+            </div>
+          ) : filteredTools.length === 0 ? (
+            <div className="text-center py-12">
+              <Wrench className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              <h3 className="text-lg font-medium">No tools found</h3>
+              <p className="text-muted-foreground mb-4">
+                {searchQuery || filterCategory !== "all" || filterStatus !== "all"
+                  ? "Try adjusting your filters"
+                  : "Get started by adding your first tool"}
+              </p>
+              <Button asChild>
+                <Link href="/admin/tools/add">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Tool
+                </Link>
+              </Button>
+            </div>
+          ) : (
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Tool</TableHead>
                 <TableHead>Category</TableHead>
-                <TableHead>Status</TableHead>
                 <TableHead>Type</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Tier</TableHead>
                 <TableHead>Usage</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
               </TableRow>
@@ -384,12 +445,27 @@ export default function ToolsManagementPage() {
                   <TableRow key={tool.id}>
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center">
-                          <CategoryIcon className="h-4 w-4 text-primary" />
+                        <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center overflow-hidden">
+                          {tool.icon_url ? (
+                            <img 
+                              src={tool.icon_url} 
+                              alt={tool.name} 
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <CategoryIcon className="h-5 w-5 text-primary" />
+                          )}
                         </div>
                         <div>
-                          <p className="font-medium">{tool.name}</p>
-                          <p className="text-sm text-muted-foreground">/{tool.slug}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium">{tool.name}</p>
+                            {tool.is_external && (
+                              <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                            )}
+                          </div>
+                          <p className="text-sm text-muted-foreground truncate max-w-[200px]">
+                            {tool.site_url || `/${tool.slug}`}
+                          </p>
                         </div>
                       </div>
                     </TableCell>
@@ -397,37 +473,63 @@ export default function ToolsManagementPage() {
                       <Badge variant="outline" className="capitalize">{tool.category}</Badge>
                     </TableCell>
                     <TableCell>
+                      {tool.is_external ? (
+                        <Badge variant="secondary" className="gap-1">
+                          <Globe className="h-3 w-3" />
+                          External
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline">Internal</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
                       <div className="flex items-center gap-2">
-                        <div className={`h-2 w-2 rounded-full ${tool.isActive ? "bg-green-500" : "bg-gray-400"}`} />
-                        <span className="text-sm">{tool.isActive ? "Active" : "Inactive"}</span>
+                        <div className={`h-2 w-2 rounded-full ${tool.is_active ? "bg-green-500" : "bg-gray-400"}`} />
+                        <span className="text-sm">{tool.is_active ? "Active" : "Inactive"}</span>
                       </div>
                     </TableCell>
                     <TableCell>
-                      {tool.isPremium ? (
-                        <Badge className="bg-yellow-500">Premium</Badge>
+                      {tool.is_premium ? (
+                        <Badge className="bg-yellow-500 hover:bg-yellow-600">
+                          <Crown className="h-3 w-3 mr-1" />
+                          Premium
+                        </Badge>
                       ) : (
                         <Badge variant="secondary">Free</Badge>
                       )}
                     </TableCell>
                     <TableCell>
-                      <span className="font-medium">{tool.usageCount.toLocaleString()}</span>
+                      <span className="font-medium">{(tool.usage_count || 0).toLocaleString()}</span>
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreHorizontal className="h-4 w-4" />
+                          <Button variant="ghost" size="icon" disabled={isUpdating === tool.id}>
+                            {isUpdating === tool.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <MoreHorizontal className="h-4 w-4" />
+                            )}
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => openEditDialog(tool)}>
+                          <DropdownMenuItem onClick={() => openEditPage(tool)}>
                             <Edit className="h-4 w-4 mr-2" />
                             Edit Tool
                           </DropdownMenuItem>
+                          {tool.is_external && tool.site_url && (
+                            <DropdownMenuItem asChild>
+                              <a href={tool.site_url} target="_blank" rel="noopener noreferrer">
+                                <ExternalLink className="h-4 w-4 mr-2" />
+                                Visit Site
+                              </a>
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem onClick={() => handleToggleActive(tool)}>
-                            {tool.isActive ? (
+                            {tool.is_active ? (
                               <>
                                 <EyeOff className="h-4 w-4 mr-2" />
                                 Disable
@@ -441,14 +543,17 @@ export default function ToolsManagementPage() {
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleTogglePremium(tool)}>
                             <Crown className="h-4 w-4 mr-2" />
-                            {tool.isPremium ? "Make Free" : "Make Premium"}
+                            {tool.is_premium ? "Make Free" : "Make Premium"}
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => { setSelectedTool(tool); setIsSettingsDialogOpen(true); }}>
                             <Settings className="h-4 w-4 mr-2" />
                             Settings
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteTool(tool)}>
+                          <DropdownMenuItem 
+                            className="text-destructive" 
+                            onClick={() => { setSelectedTool(tool); setIsDeleteDialogOpen(true); }}
+                          >
                             <Trash2 className="h-4 w-4 mr-2" />
                             Delete
                           </DropdownMenuItem>
@@ -460,150 +565,127 @@ export default function ToolsManagementPage() {
               })}
             </TableBody>
           </Table>
+          )}
         </CardContent>
       </Card>
 
-      {/* Edit Tool Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Edit Tool</DialogTitle>
-            <DialogDescription>Update tool information</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="edit-name">Tool Name</Label>
-              <Input 
-                id="edit-name" 
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-slug">Slug</Label>
-              <Input 
-                id="edit-slug" 
-                value={formData.slug}
-                onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-category">Category</Label>
-              <Select value={formData.category} onValueChange={(v) => setFormData({ ...formData, category: v })}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map((cat) => (
-                    <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-description">Description</Label>
-              <Textarea 
-                id="edit-description" 
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <Label>Premium Tool</Label>
-              <Switch 
-                checked={formData.isPremium}
-                onCheckedChange={(checked) => setFormData({ ...formData, isPremium: checked })}
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <Label>Active</Label>
-              <Switch 
-                checked={formData.isActive}
-                onCheckedChange={(checked) => setFormData({ ...formData, isActive: checked })}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleEditTool}>Save Changes</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the tool &quot;{selectedTool?.name}&quot;. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteTool}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isUpdating ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Tool Settings Dialog */}
       <Dialog open={isSettingsDialogOpen} onOpenChange={setIsSettingsDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Tool Settings</DialogTitle>
-            <DialogDescription>Configure advanced tool settings</DialogDescription>
+            <DialogDescription>Configure advanced settings for {selectedTool?.name}</DialogDescription>
           </DialogHeader>
           {selectedTool && (
-            <Tabs defaultValue="limits" className="py-4">
+            <Tabs defaultValue="info" className="py-4">
               <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="limits">Usage Limits</TabsTrigger>
+                <TabsTrigger value="info">Info</TabsTrigger>
+                <TabsTrigger value="limits">Limits</TabsTrigger>
                 <TabsTrigger value="access">Access</TabsTrigger>
-                <TabsTrigger value="advanced">Advanced</TabsTrigger>
               </TabsList>
+              <TabsContent value="info" className="space-y-4 pt-4">
+                <div className="space-y-2">
+                  <Label>Tool ID</Label>
+                  <Input value={selectedTool.id} disabled />
+                </div>
+                <div className="space-y-2">
+                  <Label>Slug</Label>
+                  <Input value={selectedTool.slug} disabled />
+                </div>
+                {selectedTool.is_external && selectedTool.site_url && (
+                  <div className="space-y-2">
+                    <Label>External URL</Label>
+                    <div className="flex gap-2">
+                      <Input value={selectedTool.site_url} disabled className="flex-1" />
+                      <Button variant="outline" size="icon" asChild>
+                        <a href={selectedTool.site_url} target="_blank" rel="noopener noreferrer">
+                          <ExternalLink className="h-4 w-4" />
+                        </a>
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <Label>Created</Label>
+                  <Input value={new Date(selectedTool.created_at).toLocaleDateString()} disabled />
+                </div>
+              </TabsContent>
               <TabsContent value="limits" className="space-y-4 pt-4">
                 <div className="space-y-2">
                   <Label>Free Tier Limit (per month)</Label>
-                  <Input type="number" defaultValue="100" />
+                  <Input type="number" value={selectedTool.usage_limit_free} disabled />
                 </div>
                 <div className="space-y-2">
                   <Label>Pro Tier Limit (per month)</Label>
-                  <Input type="number" defaultValue="1000" />
+                  <Input type="number" value={selectedTool.usage_limit_pro} disabled />
                 </div>
-                <div className="space-y-2">
-                  <Label>Rate Limit (per minute)</Label>
-                  <Input type="number" defaultValue="10" />
-                </div>
+                <p className="text-sm text-muted-foreground">
+                  Edit the tool to modify these limits.
+                </p>
               </TabsContent>
               <TabsContent value="access" className="space-y-4 pt-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <Label>Require Authentication</Label>
-                    <p className="text-sm text-muted-foreground">Users must be logged in</p>
+                    <Label>Status</Label>
+                    <p className="text-sm text-muted-foreground">Tool visibility</p>
                   </div>
-                  <Switch defaultChecked />
+                  <Badge variant={selectedTool.is_active ? "default" : "secondary"}>
+                    {selectedTool.is_active ? "Active" : "Inactive"}
+                  </Badge>
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
-                    <Label>Track Usage</Label>
-                    <p className="text-sm text-muted-foreground">Log tool usage analytics</p>
+                    <Label>Access Tier</Label>
+                    <p className="text-sm text-muted-foreground">Subscription requirement</p>
                   </div>
-                  <Switch defaultChecked />
+                  <Badge variant={selectedTool.is_premium ? "default" : "secondary"}>
+                    {selectedTool.is_premium ? "Premium" : "Free"}
+                  </Badge>
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
-                    <Label>Show in Directory</Label>
-                    <p className="text-sm text-muted-foreground">Display in public tools list</p>
+                    <Label>Type</Label>
+                    <p className="text-sm text-muted-foreground">Tool location</p>
                   </div>
-                  <Switch defaultChecked />
-                </div>
-              </TabsContent>
-              <TabsContent value="advanced" className="space-y-4 pt-4">
-                <div className="space-y-2">
-                  <Label>Custom CSS Class</Label>
-                  <Input placeholder="custom-tool-class" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Meta Keywords</Label>
-                  <Input placeholder="keyword1, keyword2, keyword3" />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Enable API Access</Label>
-                    <p className="text-sm text-muted-foreground">Allow programmatic access</p>
-                  </div>
-                  <Switch />
+                  <Badge variant="outline">
+                    {selectedTool.is_external ? "External" : "Internal"}
+                  </Badge>
                 </div>
               </TabsContent>
             </Tabs>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsSettingsDialogOpen(false)}>Cancel</Button>
-            <Button onClick={() => { setIsSettingsDialogOpen(false); toast.success("Settings saved"); }}>
-              Save Settings
+            <Button variant="outline" onClick={() => setIsSettingsDialogOpen(false)}>Close</Button>
+            <Button onClick={() => { setIsSettingsDialogOpen(false); openEditPage(selectedTool!); }}>
+              Edit Tool
             </Button>
           </DialogFooter>
         </DialogContent>

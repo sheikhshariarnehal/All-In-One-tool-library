@@ -21,6 +21,7 @@ const WordCounter = lazy(() => import("@/components/tools/academic/word-counter"
 const CitationGenerator = lazy(() => import("@/components/tools/academic/citation-generator"));
 const AssignmentTracker = lazy(() => import("@/components/tools/academic/assignment-tracker"));
 const EssayOutlineGenerator = lazy(() => import("@/components/tools/academic/essay-outline-generator"));
+const ImageToPDF = lazy(() => import("@/components/tools/academic/image-to-pdf"));
 
 // Document Tools
 const PDFCompressor = lazy(() => import("@/components/tools/document/pdf-compressor"));
@@ -45,6 +46,7 @@ const componentMap: Record<string, ComponentType> = {
   "citation-generator": CitationGenerator,
   "assignment-tracker": AssignmentTracker,
   "essay-outline-generator": EssayOutlineGenerator,
+  "image-to-pdf": ImageToPDF,
   // Document
   "pdf-compressor": PDFCompressor,
   // Utilities
